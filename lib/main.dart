@@ -1,0 +1,84 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:provider/provider.dart';
+import 'package:ha_flutter_dashboard/blocs/dashboard_bloc.dart';
+import 'package:ha_flutter_dashboard/blocs/home_assistant_bloc.dart';
+import 'package:ha_flutter_dashboard/blocs/launcher_bloc.dart';
+import 'package:ha_flutter_dashboard/blocs/theme_bloc.dart';
+import 'package:ha_flutter_dashboard/screens/splash_screen.dart';
+import 'package:ha_flutter_dashboard/services/home_assistant_discovery_service.dart';
+import 'package:ha_flutter_dashboard/services/storage_service.dart';
+import 'package:ha_flutter_dashboard/themes/app_theme.dart';
+import 'package:ha_flutter_dashboard/utils/debug_logger.dart';
+import 'package:media_kit/media_kit.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
+
+  // Initialize debug logger
+  await DebugLogger.initialize();
+  DebugLogger.log('Application started');
+  
+  // Initialize storage service
+  final storageService = StorageService();
+  await storageService.init();
+  
+  runApp(MyApp(storageService: storageService));
+}
+
+class MyApp extends StatelessWidget {
+  final StorageService storageService;
+  
+  const MyApp({super.key, required this.storageService});
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<StorageService>.value(value: storageService),
+        RepositoryProvider<HomeAssistantDiscoveryService>(
+          create: (context) => HomeAssistantDiscoveryService(),
+        ),
+      ],
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<ThemeBloc>(
+            create: (context) => ThemeBloc(
+              storageService: context.read<StorageService>(),
+            ),
+          ),
+          BlocProvider<LauncherBloc>(
+            create: (context) => LauncherBloc(
+              storageService: context.read<StorageService>(),
+            ),
+          ),
+          BlocProvider<HomeAssistantBloc>(
+            create: (context) => HomeAssistantBloc(
+              discoveryService: context.read<HomeAssistantDiscoveryService>(),
+              storageService: context.read<StorageService>(),
+            ),
+          ),
+          BlocProvider<DashboardBloc>(
+            create: (context) => DashboardBloc(
+              storageService: context.read<StorageService>(),
+            ),
+          ),
+        ],
+        child: BlocBuilder<ThemeBloc, ThemeState>(
+          builder: (context, state) {
+            return MaterialApp(
+              title: 'HA Flutter Dashboard',
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: state.themeMode,
+              home: const SplashScreen(),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

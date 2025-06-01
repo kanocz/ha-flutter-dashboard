@@ -1,0 +1,188 @@
+import 'package:flutter/material.dart';
+import 'package:ha_flutter_dashboard/models/dashboard_widget.dart';
+import 'package:ha_flutter_dashboard/models/entity_state.dart';
+import 'package:ha_flutter_dashboard/widgets/base_widget_card.dart';
+import 'package:media_kit_video/media_kit_video.dart';
+import 'package:media_kit/media_kit.dart';
+
+class RtspVideoWidgetCard extends BaseWidgetCard {
+  const RtspVideoWidgetCard({
+    Key? key,
+    required DashboardWidget widget,
+    EntityState? entityState,
+    VoidCallback? onTap,
+    VoidCallback? onLongPress,
+    bool isEditing = false,
+    bool isInteractive = true,
+  }) : super(
+          key: key,
+          widget: widget,
+          entityState: entityState,
+          onTap: onTap,
+          onLongPress: onLongPress,
+          isEditing: isEditing,
+          isInteractive: isInteractive,
+        );
+
+  @override
+  Widget buildWidgetContent(
+    BuildContext context, {
+    bool isSmallWidget = false,
+    bool useSimplifiedView = false,
+  }) {
+    final url = widget.config['url'] as String?;
+    if (url == null || url.isEmpty) {
+      return const Center(
+        child: Text('No RTSP URL configured'),
+      );
+    }
+    return _RtspVideoPlayer(url: url);
+  }
+}
+
+class _RtspVideoPlayer extends StatefulWidget {
+  final String url;
+  const _RtspVideoPlayer({Key? key, required this.url}) : super(key: key);
+
+  @override
+  State<_RtspVideoPlayer> createState() => _RtspVideoPlayerState();
+}
+
+class _RtspVideoPlayerState extends State<_RtspVideoPlayer> {
+  late final Player player;
+  late final VideoController controller;
+  bool _isPlayerInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    try {
+      // Create player with better buffering settings
+      player = Player(
+        configuration: PlayerConfiguration(
+          bufferSize: 32 * 1024 * 1024, // 32MB buffer for better streaming
+        ),
+      );
+      
+      controller = VideoController(player);
+      
+      // Initialize player with RTSP URL
+      await player.open(
+        Media(widget.url),
+        play: true,
+      );
+      
+      if (mounted) {
+        setState(() {
+          _isPlayerInitialized = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error initializing RTSP video player: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    player.dispose();
+    super.dispose();
+  }
+  
+  void _showFullscreenDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog.fullscreen(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Video player
+              _isPlayerInitialized ? Video(
+                controller: controller,
+                fit: BoxFit.contain,
+              ) : const Center(child: CircularProgressIndicator()),
+              
+              // Exit button
+              Positioned(
+                top: 16,
+                right: 16,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.fullscreen_exit,
+                      color: Colors.white,
+                    ),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: AspectRatio(
+        aspectRatio: 16.0 / 9.0, // Exact 16:9 aspect ratio
+        child: Stack(
+          children: [
+            // Show loading indicator until player is initialized
+            if (!_isPlayerInitialized)
+              const Center(child: CircularProgressIndicator()),
+              
+            // Video player with no controls - only show if initialized
+            if (_isPlayerInitialized)
+              Video(
+                controller: controller,
+                fit: BoxFit.cover, // Force video to fill the container
+              ),
+            
+            // Custom fullscreen button overlay
+            if (_isPlayerInitialized)
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.fullscreen,
+                      color: Colors.white,
+                    ),
+                    onPressed: () {
+                      _showFullscreenDialog(context);
+                    },
+                    iconSize: 24,
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(
+                      minHeight: 32,
+                      minWidth: 32,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}

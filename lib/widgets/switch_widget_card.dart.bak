@@ -1,0 +1,114 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:ha_flutter_dashboard/blocs/dashboard_bloc.dart';
+import 'package:ha_flutter_dashboard/models/dashboard_widget.dart';
+import 'package:ha_flutter_dashboard/models/entity_state.dart';
+import 'package:ha_flutter_dashboard/services/home_assistant_api_service.dart';
+import 'package:ha_flutter_dashboard/utils/debug_logger.dart';
+import 'package:ha_flutter_dashboard/widgets/base_widget_card.dart';
+
+class SwitchWidgetCard extends BaseWidgetCard {
+  final HomeAssistantApiService apiService;
+
+  const SwitchWidgetCard({
+    Key? key,
+    required DashboardWidget widget,
+    required this.apiService,
+    EntityState? entityState,
+    VoidCallback? onTap,
+    VoidCallback? onLongPress,
+    bool isEditing = false,
+  }) : super(
+          key: key,
+          widget: widget,
+          entityState: entityState,
+          onTap: onTap,
+          onLongPress: onLongPress,
+          isEditing: isEditing,
+        );
+
+  @override
+  Widget buildWidgetContent(BuildContext context) {
+    // Use a StreamBuilder to directly listen for real-time updates from the API service
+    return StreamBuilder<EntityState>(
+      // Initial data is the current entity state
+      initialData: entityState,
+      // Listen to state updates from the API service, filtering to only this entity
+      stream: apiService.stateUpdateStream?.where(
+        (state) => state.entityId == widget.entityId,
+      ),
+      builder: (context, snapshot) {
+        // Get the latest state from the snapshot or use the initial entityState
+        final currentState = snapshot.data ?? entityState;
+            
+        DebugLogger.log('SwitchWidget: Building with entityState: ${currentState?.state}');
+
+        if (currentState == null) {
+          return const Center(
+            child: Text('No data'),
+          );
+        }
+
+        final isOn = currentState.state.toLowerCase() == 'on';
+        final themeData = Theme.of(context);
+        final colorScheme = themeData.colorScheme;
+
+        return InkWell(
+          onTap: isEditing 
+              ? null 
+              : () async {
+                  DebugLogger.log('SwitchWidget: Switch tapped, toggling state');
+                  // Use the toggleSwitch method from the apiService
+                  try {
+                    await apiService.toggleSwitch(widget.entityId);
+                  } catch (e) {
+                    DebugLogger.log('SwitchWidget: Error toggling switch: $e');
+                  }
+                },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              color: isOn ? colorScheme.primaryContainer.withOpacity(0.3) : null,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Display a status icon based on the state
+                Icon(
+                  isOn ? Icons.power_rounded : Icons.power_off_rounded,
+                  size: 32,
+                  color: isOn ? colorScheme.primary : colorScheme.onSurface.withOpacity(0.6),
+                ),
+                const SizedBox(height: 8),
+                // Standard Switch control
+                Switch(
+                  value: isOn,
+                  onChanged: isEditing
+                      ? null
+                      : (value) async {
+                          try {
+                            await apiService.toggleSwitch(widget.entityId);
+                          } catch (e) {
+                            DebugLogger.log('SwitchWidget: Error toggling switch: $e');
+                          }
+                        },
+                ),
+                const SizedBox(height: 4),
+                // Status text
+                Text(
+                  isOn ? 'ON' : 'OFF',
+                  style: themeData.textTheme.bodyLarge?.copyWith(
+                    color: isOn ? colorScheme.primary : null,
+                    fontWeight: isOn ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}

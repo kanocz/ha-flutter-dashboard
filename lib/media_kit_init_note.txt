@@ -1,0 +1,13 @@
+NOTE: To ensure proper RTSP video playback, you must call MediaKit.ensureInitialized() before any media_kit API usage.
+
+In this project, add the following to main.dart, before runApp():
+
+import 'package:media_kit/media_kit.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await MediaKit.ensureInitialized();
+  // ...rest of your initialization
+}
+
+This guarantees the media_kit platform is ready before any player is created.
