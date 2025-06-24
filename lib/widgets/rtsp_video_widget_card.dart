@@ -59,6 +59,8 @@ class _RtspVideoPlayerState extends State<_RtspVideoPlayer> {
 
   final _lifecycleObserver = _RtspLifecycleObserver();
   Timer? _healthCheckTimer;
+  ValueNotifier<bool>? _screensaverNotifier;
+  VoidCallback? _screensaverListener;
 
   @override
   void initState() {
@@ -109,7 +111,7 @@ class _RtspVideoPlayerState extends State<_RtspVideoPlayer> {
       if (!mounted || _isPlayerError) return;
       // Check if player is still playing, if not, try to restart
       try {
-        final state = await player.state;
+        final state = player.state;
         if (!state.playing || state.completed) {
           await _restartPlayer();
         }
@@ -145,12 +147,55 @@ class _RtspVideoPlayerState extends State<_RtspVideoPlayer> {
   void dispose() {
     WidgetsBinding.instance.removeObserver(_lifecycleObserver);
     _healthCheckTimer?.cancel();
+    // Fix: Check both notifier and listener are not null
+    if (_screensaverNotifier != null && _screensaverListener != null) {
+      _screensaverNotifier!.removeListener(_screensaverListener!);
+    }
     try {
       player.dispose();
     } catch (e) {
       debugPrint('Error disposing player: $e');
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Remove old listener if it exists
+    if (_screensaverNotifier != null && _screensaverListener != null) {
+      _screensaverNotifier!.removeListener(_screensaverListener!);
+    }
+    
+    // Get the screensaver notifier from context
+    final screensaverNotifier = ScreensaverNotifier.of(context);
+    debugPrint('RTSP Widget: ScreensaverNotifier found: \\${screensaverNotifier != null}');
+    
+    _screensaverNotifier = screensaverNotifier?.isScreensaverActive;
+    
+    if (_screensaverNotifier != null) {
+      debugPrint('RTSP Widget: Setting up screensaver listener');
+      _screensaverListener = () async {
+        final isActive = _screensaverNotifier?.value ?? false;
+        debugPrint('RTSP Widget: Screensaver state changed to: \\${isActive}');
+        if (isActive) {
+          if (_isPlayerInitialized && !_isPlayerError) {
+            debugPrint('RTSP Widget: Stopping video due to screensaver');
+            await player.stop();
+          }
+        } else {
+          if (_isPlayerInitialized && !_isPlayerError) {
+            debugPrint('RTSP Widget: Restarting video after screensaver');
+            await _restartPlayer();
+          }
+        }
+      };
+      _screensaverNotifier!.addListener(_screensaverListener!);
+      // Immediately apply the current state in case it changed while widget was not listening
+      _screensaverListener!();
+    } else {
+      debugPrint('RTSP Widget: No screensaver notifier available');
+    }
   }
 
   void _showFullscreenDialog(BuildContext context) {
@@ -285,4 +330,21 @@ class _RtspLifecycleObserver extends WidgetsBindingObserver {
       stateObj?._restartPlayer();
     }
   }
+}
+
+class ScreensaverNotifier extends InheritedWidget {
+  final ValueNotifier<bool> isScreensaverActive;
+  const ScreensaverNotifier({
+    Key? key,
+    required this.isScreensaverActive,
+    required Widget child,
+  }) : super(key: key, child: child);
+
+  static ScreensaverNotifier? of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<ScreensaverNotifier>();
+  }
+
+  @override
+  bool updateShouldNotify(ScreensaverNotifier oldWidget) =>
+      isScreensaverActive != oldWidget.isScreensaverActive;
 }

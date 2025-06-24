@@ -18,6 +18,7 @@ import 'package:ha_flutter_dashboard/services/home_assistant_api_service.dart';
 import 'package:ha_flutter_dashboard/services/storage_service.dart';
 import 'package:ha_flutter_dashboard/widgets/widget_card_factory.dart';
 import 'package:ha_flutter_dashboard/widgets/numpad_pin_dialog.dart';
+import 'package:ha_flutter_dashboard/widgets/rtsp_video_widget_card.dart';
 import 'package:uuid/uuid.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -49,9 +50,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _snapToGrid = false;
   bool _snapTo10px = false;
 
+  late final ValueNotifier<bool> _screensaverNotifier;
+
   @override
   void initState() {
     super.initState();
+    _screensaverNotifier = ValueNotifier<bool>(false);
     // Do not call _applyOrientationLock here, _storageService is not initialized yet.
     // _applyOrientationLock will be called after _storageService is initialized in _initialize().
     _isEditing = false;
@@ -197,8 +201,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _showScreensaver() {
     if (_isScreensaverActive) return; // Prevent multiple screensavers
-    
-    _isScreensaverActive = true;
+    debugPrint('Dashboard: Showing screensaver, setting notifier to true');
+    setState(() {
+      _isScreensaverActive = true;
+      _screensaverNotifier.value = true;
+    });
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) {
@@ -210,7 +217,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ).then((_) {
       // Reset screensaver timer when returning from screensaver
       _resetScreensaverTimer();
-      _isScreensaverActive = false; // Clear the flag when screensaver ends
+      debugPrint('Dashboard: Hiding screensaver, setting notifier to false');
+      setState(() {
+        _isScreensaverActive = false;
+        _screensaverNotifier.value = false;
+      });
       // Restore fullscreen mode if enabled
       if (_storageService.isFullscreenModeEnabled()) {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
@@ -274,6 +285,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     _autoLockTimer?.cancel();
     _screensaverTimer?.cancel();
+    _screensaverNotifier.dispose();
     super.dispose();
   }
 
@@ -1063,18 +1075,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
     }
-    // Wrap dashboard content in a Listener to re-apply fullscreen on any pointer down
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) {
-        if (_storageService.isFullscreenModeEnabled()) {
-          SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
-        }
-        _resetScreensaverTimer();
-      },
-      child: WillPopScope(
-        onWillPop: () async => false, // Block back navigation
-        child: _buildDashboardContent(context),
+    // Provide screensaver state to all widgets
+    return ScreensaverNotifier(
+      isScreensaverActive: _screensaverNotifier,
+      child: Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) {
+          if (_storageService.isFullscreenModeEnabled()) {
+            SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+          }
+          _resetScreensaverTimer();
+        },
+        child: WillPopScope(
+          onWillPop: () async => false, // Block back navigation
+          child: _buildDashboardContent(context),
+        ),
       ),
     );
   }

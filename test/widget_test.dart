@@ -9,11 +9,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:ha_flutter_dashboard/main.dart';
+import 'package:ha_flutter_dashboard/services/storage_service.dart';
 
 void main() {
   testWidgets('Counter increments smoke test', (WidgetTester tester) async {
+    // Create a mock storage service for testing
+    final storageService = StorageService();
+    await storageService.init();
+    
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(MyApp(storageService: storageService));
 
     // Verify that our counter starts at 0.
     expect(find.text('0'), findsOneWidget);
