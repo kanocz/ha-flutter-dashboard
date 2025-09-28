@@ -26,7 +26,7 @@ class SwitchWidgetCard extends BaseWidgetCard {
         );
 
   @override
-  Widget buildWidgetContent(BuildContext context, {bool isSmallWidget = false}) {
+  Widget buildWidgetContent(BuildContext context, {bool isSmallWidget = false, bool useSimplifiedView = false}) {
     // Use a StreamBuilder to directly listen for real-time updates from the API service
     return StreamBuilder<EntityState>(
       // Initial data is the current entity state

@@ -289,4 +289,12 @@ class StorageService {
   Future<void> clearAllDashboardWidgets() async {
     await _widgetsBox.clear();
   }
+  
+  // Clear all Home Assistant instances but keep widgets
+  Future<void> clearHomeAssistantInstances() async {
+    await _prefs.setString(AppConstants.keyHaInstances, '[]');
+    await _prefs.setString(AppConstants.keySelectedHaInstance, '');
+    await _prefs.setString(AppConstants.keyLongTermToken, '');
+    // Note: We deliberately don't clear dashboard widgets here
+  }
 }

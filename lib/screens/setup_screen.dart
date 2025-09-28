@@ -4,6 +4,7 @@ import 'package:ha_flutter_dashboard/blocs/home_assistant_bloc.dart';
 import 'package:ha_flutter_dashboard/blocs/launcher_bloc.dart';
 import 'package:ha_flutter_dashboard/models/home_assistant_instance.dart';
 import 'package:ha_flutter_dashboard/screens/dashboard_screen.dart';
+import 'package:ha_flutter_dashboard/widgets/qr_scanner_widget.dart';
 import 'package:uuid/uuid.dart';
 
 class SetupScreen extends StatefulWidget {
@@ -100,6 +101,26 @@ class _SetupScreenState extends State<SetupScreen> {
     });
   }
 
+  void _openQRScanner() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => QRScannerWidget(
+          onQRCodeScanned: (String scannedData) {
+            setState(() {
+              _tokenController.text = scannedData;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Token scanned successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
   void _selectInstance(String id) {
     context.read<HomeAssistantBloc>().add(SelectInstance(id));
   }
@@ -167,9 +188,14 @@ class _SetupScreenState extends State<SetupScreen> {
                       const SizedBox(height: 16),
                       TextField(
                         controller: _tokenController,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Long-term Access Token',
-                          border: OutlineInputBorder(),
+                          border: const OutlineInputBorder(),
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.qr_code_scanner),
+                            onPressed: _openQRScanner,
+                            tooltip: 'Scan QR Code',
+                          ),
                         ),
                         obscureText: true,
                       ),

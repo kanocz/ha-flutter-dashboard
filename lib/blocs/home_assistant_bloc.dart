@@ -129,10 +129,15 @@ class HomeAssistantBloc extends Bloc<HomeAssistantEvent, HomeAssistantState> {
     if (state is HomeAssistantLoaded) {
       final currentState = state as HomeAssistantLoaded;
       
-      // Add the instance to the discovery service
+      // Clear all existing instances first (we only allow one instance at a time)
+      for (final existingInstance in currentState.instances) {
+        _discoveryService.removeInstance(existingInstance.id);
+      }
+      
+      // Add the new instance to the discovery service
       _discoveryService.addManualInstance(event.instance);
       
-      // Get the updated instances
+      // Get the updated instances (should only contain the new one)
       final instances = _discoveryService.discoveredInstances;
       
       // Save the instances to storage
