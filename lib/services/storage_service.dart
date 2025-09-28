@@ -297,4 +297,13 @@ class StorageService {
     await _prefs.setString(AppConstants.keyLongTermToken, '');
     // Note: We deliberately don't clear dashboard widgets here
   }
+
+  // Import/Export URL
+  String getImportExportUrl() {
+    return _prefs.getString('import_export_url') ?? '';
+  }
+
+  Future<void> setImportExportUrl(String url) async {
+    await _prefs.setString('import_export_url', url);
+  }
 }

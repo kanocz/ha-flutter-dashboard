@@ -1034,6 +1034,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+
+
   // Determine the grid dimensions based on orientation and user settings
   int getMaxGridWidth(BuildContext context) {
     final themeState = context.read<ThemeBloc>().state;

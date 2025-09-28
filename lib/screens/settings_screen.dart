@@ -7,8 +7,12 @@ import 'package:ha_flutter_dashboard/blocs/theme_bloc.dart';
 import 'package:ha_flutter_dashboard/config/constants.dart';
 import 'package:ha_flutter_dashboard/screens/setup_screen.dart';
 import 'package:ha_flutter_dashboard/services/storage_service.dart';
+import 'package:ha_flutter_dashboard/services/import_export_service.dart';
 import 'package:ha_flutter_dashboard/widgets/numpad_pin_dialog.dart';
 import 'package:ha_flutter_dashboard/widgets/set_pin_dialog.dart';
+import 'package:ha_flutter_dashboard/models/dashboard_config.dart';
+import 'package:ha_flutter_dashboard/models/dashboard_widget.dart';
+import 'package:ha_flutter_dashboard/blocs/dashboard_bloc.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -19,9 +23,12 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late StorageService _storageService;
+  late ImportExportService _importExportService;
   bool _isPasswordProtectionEnabled = false;
   bool _isAutoLockEnabled = false;
   bool _isInitialized = false;
+  final _urlController = TextEditingController();
+  bool _isImportExportLoading = false;
 
   @override
   void initState() {
@@ -32,12 +39,201 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _initializeStorageService() async {
     _storageService = StorageService();
     await _storageService.init();
+    _importExportService = ImportExportService(_storageService);
+    
+    // Load saved URL
+    final savedUrl = _storageService.getImportExportUrl();
+    if (savedUrl.isNotEmpty) {
+      _urlController.text = savedUrl;
+    }
+    
     if (mounted) {
       setState(() {
         _isPasswordProtectionEnabled = _storageService.isPasswordProtectionEnabled();
         _isAutoLockEnabled = _storageService.isAutoLockEnabled();
         _isInitialized = true;
       });
+    }
+  }
+
+  @override
+  void dispose() {
+    _urlController.dispose();
+    super.dispose();
+  }
+
+  // Import/Export methods
+  Future<void> _saveUrl() async {
+    await _storageService.setImportExportUrl(_urlController.text.trim());
+  }
+  
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  void _showSuccess(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  List<DashboardWidget> _getCurrentWidgets() {
+    final dashboardState = context.read<DashboardBloc>().state;
+    if (dashboardState is DashboardLoaded) {
+      return dashboardState.widgets;
+    }
+    return [];
+  }
+
+  Future<void> _exportToFile() async {
+    try {
+      setState(() => _isImportExportLoading = true);
+      final widgets = _getCurrentWidgets();
+      if (widgets.isEmpty) {
+        _showError('No widgets to export');
+        return;
+      }
+      
+      await _importExportService.exportToFile(widgets);
+      _showSuccess('Configuration exported to file');
+    } catch (e) {
+      _showError(e.toString());
+    } finally {
+      setState(() => _isImportExportLoading = false);
+    }
+  }
+
+  Future<void> _exportToServer() async {
+    final url = _urlController.text.trim();
+    if (url.isEmpty) {
+      _showError('Please enter server URL');
+      return;
+    }
+
+    if (!_importExportService.isValidUrl(url)) {
+      _showError('Invalid URL');
+      return;
+    }
+
+    try {
+      setState(() => _isImportExportLoading = true);
+      final widgets = _getCurrentWidgets();
+      if (widgets.isEmpty) {
+        _showError('No widgets to export');
+        return;
+      }
+      
+      await _importExportService.exportToServer(url, widgets);
+      _showSuccess('Configuration sent to server');
+    } catch (e) {
+      _showError(e.toString());
+    } finally {
+      setState(() => _isImportExportLoading = false);
+    }
+  }
+
+  Future<void> _importFromFile() async {
+    try {
+      setState(() => _isImportExportLoading = true);
+      final config = await _importExportService.importFromFile();
+      await _showImportPreview(config);
+    } catch (e) {
+      _showError(e.toString());
+    } finally {
+      setState(() => _isImportExportLoading = false);
+    }
+  }
+
+  Future<void> _importFromServer() async {
+    final url = _urlController.text.trim();
+    if (url.isEmpty) {
+      _showError('Please enter server URL');
+      return;
+    }
+
+    if (!_importExportService.isValidUrl(url)) {
+      _showError('Invalid URL');
+      return;
+    }
+
+    try {
+      setState(() => _isImportExportLoading = true);
+      final config = await _importExportService.importFromServer(url);
+      await _showImportPreview(config);
+    } catch (e) {
+      _showError(e.toString());
+    } finally {
+      setState(() => _isImportExportLoading = false);
+    }
+  }
+
+  Future<void> _showImportPreview(DashboardConfig config) async {
+    final previewData = await _importExportService.getConfigPreview(config);
+    
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Import Preview'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Application: ${previewData['appName']}'),
+              Text('Version: ${previewData['version']}'),
+              Text('Exported: ${previewData['exportedAt']}'),
+              Text('Widget count: ${previewData['widgetCount']}'),
+              const SizedBox(height: 16),
+              const Text('Widget types:'),
+              ...(previewData['widgetTypes'] as List<String>)
+                  .map((type) => Text('• $type')),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Apply'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true && mounted) {
+      await _applyImport(config);
+    }
+  }
+
+  Future<void> _applyImport(DashboardConfig config) async {
+    try {
+      setState(() => _isImportExportLoading = true);
+      await _importExportService.applyImportedConfig(config, replaceAll: true);
+      
+      // Update Dashboard
+      if (context.mounted) {
+        context.read<DashboardBloc>().add(LoadDashboardWidgets());
+      }
+      
+      _showSuccess('Configuration applied (${config.widgets.length} widgets)');
+    } catch (e) {
+      _showError(e.toString());
+    } finally {
+      setState(() => _isImportExportLoading = false);
     }
   }
 
@@ -241,6 +437,124 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: _isInitialized ? () => _showWebsocketTimeoutDialog(context) : null,
           ),
           const Divider(),
+          const _SectionHeader(title: 'Import/Export'),
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Export Configuration',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Save or send widget configuration'),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isImportExportLoading ? null : _exportToFile,
+                          icon: const Icon(Icons.file_download, size: 18),
+                          label: const Text('Export to File'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isImportExportLoading ? null : _exportToServer,
+                          icon: const Icon(Icons.cloud_upload, size: 18),
+                          label: const Text('POST to Server'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Card(
+            margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Text(
+                        'Import Configuration',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      ),
+                      const Spacer(),
+                      if (_isImportExportLoading)
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.warning, color: Colors.orange, size: 16),
+                        SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Import will replace ALL existing widgets!',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isImportExportLoading ? null : _importFromFile,
+                          icon: const Icon(Icons.file_upload, size: 18),
+                          label: const Text('Import from File'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isImportExportLoading ? null : _importFromServer,
+                          icon: const Icon(Icons.cloud_download, size: 18),
+                          label: const Text('GET from Server'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _urlController,
+                    decoration: const InputDecoration(
+                      labelText: 'Server URL (for GET/POST)',
+                      hintText: 'https://example.com/api/config',
+                      prefixIcon: Icon(Icons.link),
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                    keyboardType: TextInputType.url,
+                    onChanged: (value) => _saveUrl(),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const _SectionHeader(title: 'About'),
           const ListTile(
             title: Text('App Version'),

@@ -1,0 +1,63 @@
+{
+  "version": "1.0.0",
+  "exportedAt": "2025-01-28T10:30:00.000Z",
+  "appName": "Home Assistant Dashboard",
+  "widgets": [
+    {
+      "id": "test-widget-1",
+      "type": "switch",
+      "entityId": "switch.living_room_light",
+      "caption": "Освещение гостиной",
+      "icon": "mdi:lightbulb",
+      "config": {
+        "useSimplifiedView": false,
+        "protected": false
+      },
+      "row": 0,
+      "column": 0,
+      "widthPx": 100.0,
+      "heightPx": 100.0,
+      "positionX": 0.0,
+      "positionY": 0.0
+    },
+    {
+      "id": "test-widget-2",
+      "type": "label",
+      "entityId": "",
+      "caption": "Состояние кухни",
+      "icon": "mdi:kitchen",
+      "config": {
+        "useSimplifiedView": true,
+        "protected": false
+      },
+      "row": 0,
+      "column": 1,
+      "widthPx": 200.0,
+      "heightPx": 100.0,
+      "positionX": 110.0,
+      "positionY": 0.0
+    },
+    {
+      "id": "test-widget-3",
+      "type": "climate",
+      "entityId": "climate.thermostat",
+      "caption": "Термостат 🌡️",
+      "icon": "mdi:thermostat",
+      "config": {
+        "useSimplifiedView": false,
+        "protected": true
+      },
+      "row": 1,
+      "column": 0,
+      "widthPx": 200.0,
+      "heightPx": 150.0,
+      "positionX": 0.0,
+      "positionY": 110.0
+    }
+  ],
+  "metadata": {
+    "platform": "linux",
+    "exportSource": "mobile_app",
+    "testString": "Проверка кодировки: русские символы и эмодзи 🏠🔥💡"
+  }
+}
